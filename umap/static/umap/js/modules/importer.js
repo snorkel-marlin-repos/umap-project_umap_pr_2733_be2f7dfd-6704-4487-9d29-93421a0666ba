@@ -97,6 +97,9 @@ export default class Importer extends Utils.WithTemplate {
         case 'banfr':
           import('./importers/banfr.js').then(register)
           break
+        case 'opendata':
+          import('./importers/opendata.js').then(register)
+          break
       }
     }
   }
@@ -248,7 +251,7 @@ export default class Importer extends Utils.WithTemplate {
         DomUtil.element({
           tagName: 'option',
           parent: layerSelect,
-          textContent: datalayer.getName(),
+          textContent: datalayer.options.name,
           value: datalayer.id,
         })
       }
@@ -325,13 +328,13 @@ export default class Importer extends Utils.WithTemplate {
       return false
     }
     const layer = this.layer
-    layer.properties.remoteData = {
+    layer.options.remoteData = {
       url: this.url,
       format: this.format,
     }
     if (this._umap.properties.urls.ajax_proxy) {
-      layer.properties.remoteData.proxy = true
-      layer.properties.remoteData.ttl = SCHEMA.ttl.default
+      layer.options.remoteData.proxy = true
+      layer.options.remoteData.ttl = SCHEMA.ttl.default
     }
     layer.fetchRemoteData(true).then((features) => {
       if (features?.length) {

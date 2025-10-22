@@ -17,7 +17,7 @@ class Rule {
     this.parse()
   }
 
-  constructor(umap, parent, condition = '', options = {}) {
+  constructor(umap, condition = '', options = {}) {
     // TODO make this public properties when browser coverage is ok
     // cf https://caniuse.com/?search=public%20class%20field
     this._condition = null
@@ -29,7 +29,6 @@ class Rule {
       ['!=', this.not_equal],
       ['=', this.equal],
     ]
-    this.parent = parent
     this._umap = umap
     this.active = true
     this.options = options
@@ -37,7 +36,7 @@ class Rule {
   }
 
   render(fields) {
-    this.parent.render(fields)
+    this._umap.render(fields)
   }
 
   equal(other) {
@@ -124,7 +123,7 @@ class Rule {
     const container = document.createElement('div')
     container.appendChild(builder.build())
     const autocomplete = new AutocompleteDatalist(builder.helpers.condition.input)
-    const properties = this.parent.allProperties()
+    const properties = this._umap.allProperties()
     autocomplete.suggestions = properties
     autocomplete.input.addEventListener('input', (event) => {
       const value = event.target.value
@@ -132,7 +131,7 @@ class Rule {
         autocomplete.suggestions = [`${value}=`, `${value}!=`, `${value}>`, `${value}<`]
       } else if (value.endsWith('=')) {
         const key = value.split('!')[0].split('=')[0]
-        autocomplete.suggestions = this.parent
+        autocomplete.suggestions = this._umap
           .sortedValues(key)
           .map((str) => `${value}${str ?? ''}`)
       }
@@ -142,8 +141,8 @@ class Rule {
         <i class="icon icon-16 icon-back" title="${translate('Back to list')}"></i>
       </button>`)
     backButton.addEventListener('click', () =>
-      this.parent.edit().then((panel) => {
-        panel.container.querySelector('details#rules').open = true
+      this._umap.edit().then(() => {
+        this._umap.editPanel.container.querySelector('details#rules').open = true
       })
     )
 
@@ -176,41 +175,40 @@ class Rule {
     toggle.addEventListener('click', () => {
       this.active = !this.active
       li.classList.toggle('off', !this.active)
-      this.parent.render(['rules'])
+      this._umap.render(['rules'])
     })
   }
 
   _delete() {
-    this.parent.rules.rules = this.parent.rules.rules.filter((rule) => rule !== this)
-    this.parent.rules.commit()
+    this._umap.rules.rules = this._umap.rules.rules.filter((rule) => rule !== this)
+    this._umap.rules.commit()
   }
 
   setter(key, value) {
-    const oldRules = Utils.CopyJSON(this.parent.properties.rules || {})
+    const oldRules = Utils.CopyJSON(this._umap.properties.rules || {})
     Utils.setObjectValue(this, key, value)
-    this.parent.rules.commit()
-    this.parent.sync.update('properties.rules', this.parent.properties.rules, oldRules)
+    this._umap.rules.commit()
+    this._umap.sync.update('properties.rules', this._umap.properties.rules, oldRules)
   }
 }
 
 export default class Rules {
-  constructor(umap, parent) {
+  constructor(umap) {
     this._umap = umap
-    this.parent = parent
     this.load()
   }
 
   load() {
     this.rules = []
-    if (!this.parent.properties.rules?.length) return
-    for (const { condition, options } of this.parent.properties.rules) {
+    if (!this._umap.properties.rules?.length) return
+    for (const { condition, options } of this._umap.properties.rules) {
       if (!condition) continue
-      this.rules.push(new Rule(this._umap, this.parent, condition, options))
+      this.rules.push(new Rule(this._umap, condition, options))
     }
   }
 
   onReorder(src, dst, initialIndex, finalIndex) {
-    const oldRules = Utils.CopyJSON(this.parent.properties.rules || {})
+    const oldRules = Utils.CopyJSON(this._umap.properties.rules || {})
     const moved = this.rules.find((rule) => stamp(rule) === +src.dataset.id)
     const reference = this.rules.find((rule) => stamp(rule) === +dst.dataset.id)
     const movedIdx = this.rules.indexOf(moved)
@@ -224,9 +222,9 @@ export default class Rules {
     else if (finalIndex > initialIndex) newIdx = referenceIdx
     else newIdx = referenceIdx + 1
     this.rules.splice(newIdx, 0, moved)
-    this.parent.render(['rules'])
+    this._umap.render(['rules'])
     this.commit()
-    this.parent.sync.update('properties.rules', this.parent.properties.rules, oldRules)
+    this._umap.sync.update('properties.rules', this._umap.properties.rules, oldRules)
   }
 
   edit(container) {
@@ -251,13 +249,13 @@ export default class Rules {
   }
 
   addRule() {
-    const rule = new Rule(this._umap, this.parent)
+    const rule = new Rule(this._umap)
     this.rules.push(rule)
     rule.edit(map)
   }
 
   commit() {
-    this.parent.properties.rules = this.rules.map((rule) => {
+    this._umap.properties.rules = this.rules.map((rule) => {
       return {
         condition: rule.condition,
         options: rule.options,

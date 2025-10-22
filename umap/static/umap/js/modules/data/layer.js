@@ -20,7 +20,6 @@ import * as Schema from '../schema.js'
 import TableEditor from '../tableeditor.js'
 import * as Utils from '../utils.js'
 import { LineString, Point, Polygon } from './features.js'
-import Rules from '../rules.js'
 
 export const LAYER_TYPES = [
   DefaultLayer,
@@ -50,7 +49,7 @@ export class DataLayer {
     this.pane = this._leafletMap.createPane(`datalayer${stamp(this)}`, this.parentPane)
     // FIXME: should be on layer
     this.renderer = L.svg({ pane: this.pane })
-    this.defaultProperties = {
+    this.defaultOptions = {
       displayOnLoad: true,
       inCaption: true,
       browsable: true,
@@ -63,27 +62,27 @@ export class DataLayer {
     delete data._referenceVersion
     data.id = data.id || crypto.randomUUID()
 
-    this.setProperties(data)
+    this.setOptions(data)
     this.pane.dataset.id = this.id
-    if (this.properties.rank === undefined) {
-      this.properties.rank = this._umap.datalayers.count()
+    if (this.options.rank === undefined) {
+      this.options.rank = this._umap.datalayers.count()
     }
 
-    if (!Utils.isObject(this.properties.remoteData)) {
-      this.properties.remoteData = {}
+    if (!Utils.isObject(this.options.remoteData)) {
+      this.options.remoteData = {}
     }
     // Retrocompat
-    if (this.properties.remoteData?.from) {
-      this.properties.fromZoom = this.properties.remoteData.from
-      delete this.properties.remoteData.from
+    if (this.options.remoteData?.from) {
+      this.options.fromZoom = this.options.remoteData.from
+      delete this.options.remoteData.from
     }
-    if (this.properties.remoteData?.to) {
-      this.properties.toZoom = this.properties.remoteData.to
-      delete this.properties.remoteData.to
+    if (this.options.remoteData?.to) {
+      this.options.toZoom = this.options.remoteData.to
+      delete this.options.remoteData.to
     }
+    this.backupOptions()
     this.connectToMap()
     this.permissions = new DataLayerPermissions(this._umap, this)
-    this.rules = new Rules(umap, this)
 
     this._needsFetch = this.createdOnServer || this.isRemoteLayer()
     if (!this.createdOnServer) {
@@ -97,7 +96,7 @@ export class DataLayer {
   }
 
   get id() {
-    return this.properties.id
+    return this.options.id
   }
 
   get createdOnServer() {
@@ -130,14 +129,14 @@ export class DataLayer {
     // Make sure we always have a valid rank. Undefined rank may happen
     // after importing an old umap backup, and not touching the layers
     // after that.
-    if (this.properties.rank === undefined) {
-      this.properties.rank = this.getDOMOrder()
+    if (this.options.rank === undefined) {
+      this.options.rank = this.getDOMOrder()
     }
-    return this.properties.rank
+    return this.options.rank
   }
 
   set rank(value) {
-    this.properties.rank = value
+    this.options.rank = value
   }
 
   getSyncMetadata() {
@@ -160,7 +159,7 @@ export class DataLayer {
           this._umap.onDataLayersChanged()
           break
         case 'data':
-          if (fields.includes('properties.type')) {
+          if (fields.includes('options.type')) {
             this.resetLayer()
           }
           for (const field of fields) {
@@ -206,11 +205,11 @@ export class DataLayer {
   }
 
   autoLoaded() {
-    if (!this._umap.datalayersFromQueryString) return this.properties.displayOnLoad
+    if (!this._umap.datalayersFromQueryString) return this.options.displayOnLoad
     const datalayerIds = this._umap.datalayersFromQueryString
     let loadMe = datalayerIds.includes(this.id.toString())
-    if (this.properties.old_id) {
-      loadMe = loadMe || datalayerIds.includes(this.properties.old_id.toString())
+    if (this.options.old_id) {
+      loadMe = loadMe || datalayerIds.includes(this.options.old_id.toString())
     }
     return loadMe
   }
@@ -237,7 +236,7 @@ export class DataLayer {
     // Only reset if type is defined (undefined is the default) and different from current type
     if (
       this.layer &&
-      (!this.properties.type || this.properties.type === this.layer.getType()) &&
+      (!this.options.type || this.options.type === this.layer.getType()) &&
       !force
     ) {
       return
@@ -246,7 +245,7 @@ export class DataLayer {
     if (this.layer) this.layer.clearLayers()
     // delete this.layer?
     if (visible) this._leafletMap.removeLayer(this.layer)
-    const Class = LAYER_MAP[this.properties.type] || DefaultLayer
+    const Class = LAYER_MAP[this.options.type] || DefaultLayer
     this.layer = new Class(this)
     // Rendering layer changed, so let's force reset the feature rendering too.
     this.eachFeature((feature) => feature.makeUI())
@@ -274,6 +273,7 @@ export class DataLayer {
       // In case of maps pre 1.0 still around
       delete geojson._storage
       await this.fromUmapGeoJSON(geojson)
+      this.backupOptions()
       this._loading = false
     }
   }
@@ -300,7 +300,7 @@ export class DataLayer {
 
   async fromUmapGeoJSON(geojson) {
     if (geojson._storage) geojson._umap_options = geojson._storage // Retrocompat
-    if (geojson._umap_options) this.setProperties(geojson._umap_options)
+    if (geojson._umap_options) this.setOptions(geojson._umap_options)
     if (this.isRemoteLayer()) {
       await this.fetchRemoteData()
     } else {
@@ -321,14 +321,14 @@ export class DataLayer {
   }
 
   showAtZoom() {
-    const from = Number.parseInt(this.properties.fromZoom, 10)
-    const to = Number.parseInt(this.properties.toZoom, 10)
+    const from = Number.parseInt(this.options.fromZoom, 10)
+    const to = Number.parseInt(this.options.toZoom, 10)
     const zoom = this._leafletMap.getZoom()
     return !((!Number.isNaN(from) && zoom < from) || (!Number.isNaN(to) && zoom > to))
   }
 
   hasDynamicData() {
-    return this.isRemoteLayer() && Boolean(this.properties.remoteData?.dynamic)
+    return this.isRemoteLayer() && Boolean(this.options.remoteData?.dynamic)
   }
 
   async getUrl(url, initialUrl) {
@@ -352,15 +352,15 @@ export class DataLayer {
     if (!this.hasDynamicData() && this.isLoaded() && !force) return
     if (!this.isVisible()) return
     // Keep non proxied url for later use in Alert.
-    const remoteUrl = this._umap.renderUrl(this.properties.remoteData.url)
+    const remoteUrl = this._umap.renderUrl(this.options.remoteData.url)
     let url = remoteUrl
-    if (this.properties.remoteData.proxy) {
-      url = this._umap.proxyUrl(url, this.properties.remoteData.ttl)
+    if (this.options.remoteData.proxy) {
+      url = this._umap.proxyUrl(url, this.options.remoteData.ttl)
     }
     return await this.getUrl(url, remoteUrl).then((raw) => {
       this.clear(false)
       return this._umap.formatter
-        .parse(raw, this.properties.remoteData.format)
+        .parse(raw, this.options.remoteData.format)
         .then((geojson) => this.fromGeoJSON(geojson, false))
         .catch((error) => {
           console.debug(error)
@@ -378,14 +378,22 @@ export class DataLayer {
     return !this._needsFetch
   }
 
-  setProperties(properties) {
-    delete properties.geojson
-    this.properties = Utils.CopyJSON(this.defaultProperties) // Start from fresh.
-    this.updateProperties(properties)
+  backupOptions() {
+    this._backupOptions = Utils.CopyJSON(this.options)
   }
 
-  updateProperties(properties) {
-    this.properties = Object.assign(this.properties, properties)
+  resetOptions() {
+    this.options = Utils.CopyJSON(this._backupOptions)
+  }
+
+  setOptions(options) {
+    delete options.geojson
+    this.options = Utils.CopyJSON(this.defaultOptions) // Start from fresh.
+    this.updateOptions(options)
+  }
+
+  updateOptions(options) {
+    this.options = Object.assign(this.options, options)
     this.resetLayer()
   }
 
@@ -406,11 +414,11 @@ export class DataLayer {
   }
 
   isRemoteLayer() {
-    return Boolean(this.properties.remoteData?.url && this.properties.remoteData.format)
+    return Boolean(this.options.remoteData?.url && this.options.remoteData.format)
   }
 
   isClustered() {
-    return this.properties.type === 'Cluster'
+    return this.options.type === 'Cluster'
   }
 
   showFeature(feature) {
@@ -465,38 +473,9 @@ export class DataLayer {
     }
   }
 
-  checkIndexForProperty(name) {
-    for (const feature of Object.values(this._features)) {
-      if (name in feature.properties) {
-        this.indexProperty(name)
-        return
-      }
-    }
-    this.deindexProperty(name)
-  }
-
   deindexProperty(name) {
     const idx = this._propertiesIndex.indexOf(name)
     if (idx !== -1) this._propertiesIndex.splice(idx, 1)
-  }
-
-  renameProperty(oldName, newName) {
-    this.sync.startBatch()
-    this.eachFeature((feature) => {
-      feature.renameProperty(oldName, newName)
-    })
-    this.sync.commitBatch()
-    this.deindexProperty(oldName)
-    this.indexProperty(newName)
-  }
-
-  deleteProperty(property) {
-    this.sync.startBatch()
-    this.eachFeature((feature) => {
-      feature.deleteProperty(property)
-    })
-    this.sync.commitBatch()
-    this.deindexProperty(property)
   }
 
   allProperties() {
@@ -523,7 +502,7 @@ export class DataLayer {
   }
 
   sortFeatures(collection) {
-    const sortKeys = this.getProperty('sortKey') || U.DEFAULT_LABEL_KEY
+    const sortKeys = this.getOption('sortKey') || U.DEFAULT_LABEL_KEY
     return Utils.sortFeatures(collection, sortKeys, U.lang)
   }
 
@@ -636,7 +615,7 @@ export class DataLayer {
   }
 
   getColor() {
-    return this.properties.color || this._umap.getProperty('color')
+    return this.options.color || this._umap.getProperty('color')
   }
 
   getDeleteUrl() {
@@ -693,11 +672,11 @@ export class DataLayer {
   }
 
   clone() {
-    const properties = Utils.CopyJSON(this.properties)
-    properties.name = translate('Clone of {name}', { name: this.properties.name })
-    delete properties.id
+    const options = Utils.CopyJSON(this.options)
+    options.name = translate('Clone of {name}', { name: this.options.name })
+    delete options.id
     const geojson = Utils.CopyJSON(this._geojson)
-    const datalayer = this._umap.createDirtyDataLayer(properties)
+    const datalayer = this._umap.createDirtyDataLayer(options)
     datalayer.fromGeoJSON(geojson)
     return datalayer
   }
@@ -713,19 +692,19 @@ export class DataLayer {
     }
     const container = DomUtil.create('div', 'umap-layer-properties-container')
     const metadataFields = [
-      'properties.name',
-      'properties.description',
+      'options.name',
+      'options.description',
       [
-        'properties.type',
+        'options.type',
         { handler: 'LayerTypeChooser', label: translate('Type of layer') },
       ],
-      'properties.labelKey',
+      'options.labelKey',
       [
-        'properties.displayOnLoad',
+        'options.displayOnLoad',
         { label: translate('Display on load'), handler: 'Switch' },
       ],
       [
-        'properties.browsable',
+        'options.browsable',
         {
           label: translate('Data is browsable'),
           handler: 'Switch',
@@ -733,7 +712,7 @@ export class DataLayer {
         },
       ],
       [
-        'properties.inCaption',
+        'options.inCaption',
         {
           label: translate('Show this layer in the caption'),
           handler: 'Switch',
@@ -744,16 +723,16 @@ export class DataLayer {
     let builder = new MutatingForm(this, metadataFields)
     builder.on('set', ({ detail }) => {
       this._umap.onDataLayersChanged()
-      if (detail.helper.field === 'properties.type') {
+      if (detail.helper.field === 'options.type') {
         this.edit()
       }
     })
     container.appendChild(builder.build())
 
-    const layerFields = this.layer.getEditableProperties()
+    const layerOptions = this.layer.getEditableOptions()
 
-    if (layerFields.length) {
-      builder = new MutatingForm(this, layerFields, {
+    if (layerOptions.length) {
+      builder = new MutatingForm(this, layerOptions, {
         id: 'datalayer-layer-properties',
       })
       const layerProperties = DomUtil.createFieldset(
@@ -763,60 +742,60 @@ export class DataLayer {
       layerProperties.appendChild(builder.build())
     }
 
-    const shapeFields = [
-      'properties.color',
-      'properties.iconClass',
-      'properties.iconUrl',
-      'properties.iconOpacity',
-      'properties.opacity',
-      'properties.stroke',
-      'properties.weight',
-      'properties.fill',
-      'properties.fillColor',
-      'properties.fillOpacity',
+    const shapeOptions = [
+      'options.color',
+      'options.iconClass',
+      'options.iconUrl',
+      'options.iconOpacity',
+      'options.opacity',
+      'options.stroke',
+      'options.weight',
+      'options.fill',
+      'options.fillColor',
+      'options.fillOpacity',
     ]
 
-    builder = new MutatingForm(this, shapeFields, {
+    builder = new MutatingForm(this, shapeOptions, {
       id: 'datalayer-advanced-properties',
     })
-    const shapeFieldset = DomUtil.createFieldset(
+    const shapeProperties = DomUtil.createFieldset(
       container,
       translate('Shape properties')
     )
-    shapeFieldset.appendChild(builder.build())
+    shapeProperties.appendChild(builder.build())
 
-    const advancedFields = [
-      'properties.smoothFactor',
-      'properties.dashArray',
-      'properties.zoomTo',
-      'properties.fromZoom',
-      'properties.toZoom',
-      'properties.sortKey',
+    const optionsFields = [
+      'options.smoothFactor',
+      'options.dashArray',
+      'options.zoomTo',
+      'options.fromZoom',
+      'options.toZoom',
+      'options.sortKey',
     ]
 
-    builder = new MutatingForm(this, advancedFields, {
+    builder = new MutatingForm(this, optionsFields, {
       id: 'datalayer-advanced-properties',
     })
     builder.on('set', ({ detail }) => {
-      if (detail.helper.field === 'properties.sortKey') {
+      if (detail.helper.field === 'options.sortKey') {
         this.reindex()
       }
     })
-    const advancedFieldset = DomUtil.createFieldset(
+    const advancedProperties = DomUtil.createFieldset(
       container,
       translate('Advanced properties')
     )
-    advancedFieldset.appendChild(builder.build())
+    advancedProperties.appendChild(builder.build())
 
     const popupFields = [
-      'properties.popupShape',
-      'properties.popupTemplate',
-      'properties.popupContentTemplate',
-      'properties.showLabel',
-      'properties.labelDirection',
-      'properties.labelInteractive',
-      'properties.outlinkTarget',
-      'properties.interactive',
+      'options.popupShape',
+      'options.popupTemplate',
+      'options.popupContentTemplate',
+      'options.showLabel',
+      'options.labelDirection',
+      'options.labelInteractive',
+      'options.outlinkTarget',
+      'options.interactive',
     ]
     builder = new MutatingForm(this, popupFields)
     const popupFieldset = DomUtil.createFieldset(
@@ -826,13 +805,13 @@ export class DataLayer {
     popupFieldset.appendChild(builder.build())
 
     const textPathFields = [
-      'properties.textPath',
-      'properties.textPathColor',
-      'properties.textPathRepeat',
-      'properties.textPathRotate',
-      'properties.textPathSize',
-      'properties.textPathOffset',
-      'properties.textPathPosition',
+      'options.textPath',
+      'options.textPathColor',
+      'options.textPathRepeat',
+      'options.textPathRotate',
+      'options.textPathSize',
+      'options.textPathOffset',
+      'options.textPathPosition',
     ]
     builder = new MutatingForm(this, textPathFields)
     const fieldset = DomUtil.createFieldset(container, translate('Line decoration'))
@@ -840,23 +819,23 @@ export class DataLayer {
 
     // XXX I'm not sure **why** this is needed (as it's set during `this.initialize`)
     // but apparently it's needed.
-    if (!Utils.isObject(this.properties.remoteData)) {
-      this.properties.remoteData = {}
+    if (!Utils.isObject(this.options.remoteData)) {
+      this.options.remoteData = {}
     }
 
     const remoteDataFields = [
       [
-        'properties.remoteData.url',
+        'options.remoteData.url',
         { handler: 'Url', label: translate('Url'), helpEntries: ['formatURL'] },
       ],
       [
-        'properties.remoteData.format',
+        'options.remoteData.format',
         { handler: 'DataFormat', label: translate('Format') },
       ],
-      'properties.fromZoom',
-      'properties.toZoom',
+      'options.fromZoom',
+      'options.toZoom',
       [
-        'properties.remoteData.dynamic',
+        'options.remoteData.dynamic',
         {
           handler: 'Switch',
           label: translate('Dynamic'),
@@ -864,7 +843,7 @@ export class DataLayer {
         },
       ],
       [
-        'properties.remoteData.licence',
+        'options.remoteData.licence',
         {
           label: translate('Licence'),
           helpText: translate('Please be sure the licence is compliant with your use.'),
@@ -873,14 +852,14 @@ export class DataLayer {
     ]
     if (this._umap.properties.urls.ajax_proxy) {
       remoteDataFields.push([
-        'properties.remoteData.proxy',
+        'options.remoteData.proxy',
         {
           handler: 'Switch',
           label: translate('Proxy request'),
           helpEntries: ['proxyRemoteData'],
         },
       ])
-      remoteDataFields.push('properties.remoteData.ttl')
+      remoteDataFields.push('options.remoteData.ttl')
     }
 
     const remoteDataContainer = DomUtil.createFieldset(
@@ -896,7 +875,6 @@ export class DataLayer {
       () => this.fetchRemoteData(true),
       this
     )
-    this.rules.edit(container)
 
     if (this._umap.properties.urls.datalayer_versions) {
       this.buildVersionsFieldset(container)
@@ -906,7 +884,7 @@ export class DataLayer {
       container,
       translate('Advanced actions')
     )
-    const filename = `${Utils.slugify(this.properties.name)}.geojson`
+    const filename = `${Utils.slugify(this.options.name)}.geojson`
     const tpl = `
     <div class="button-bar half">
       <button class="button" type="button" data-ref=del>
@@ -953,31 +931,22 @@ export class DataLayer {
     })
   }
 
-  getOwnProperty(option) {
-    if (Utils.usableOption(this.properties, option)) return this.properties[option]
+  getOwnOption(option) {
+    if (Utils.usableOption(this.options, option)) return this.options[option]
   }
 
-  getProperty(key, feature) {
+  getOption(option, feature) {
     if (this.layer?.getOption) {
-      const value = this.layer.getOption(key, feature)
+      const value = this.layer.getOption(option, feature)
       if (value !== undefined) return value
     }
-    if (feature) {
-      const value = this.rules.getOption(key, feature)
-      if (value !== undefined) return value
+    if (this.getOwnOption(option) !== undefined) {
+      return this.getOwnOption(option)
     }
-    if (this.getOwnProperty(key) !== undefined) {
-      return this.getOwnProperty(key)
+    if (this.layer?.defaults?.[option]) {
+      return this.layer.defaults[option]
     }
-    if (this.layer?.defaults?.[key]) {
-      return this.layer.defaults[key]
-    }
-    return this._umap.getProperty(key, feature)
-  }
-
-  getOption(key, feature) {
-    // TODO: remove when field.js does not call blindly obj.getOption anymore
-    return this.getProperty(key, feature)
+    return this._umap.getProperty(option, feature)
   }
 
   async buildVersionsFieldset(container) {
@@ -1017,9 +986,9 @@ export class DataLayer {
         if (!error) {
           if (geojson._storage) geojson._umap_options = geojson._storage // Retrocompat.
           if (geojson._umap_options) {
-            const oldProperties = Utils.CopyJSON(this.properties)
-            this.setProperties(geojson._umap_options)
-            this.sync.update('properties', this.properties, oldProperties)
+            const oldOptions = Utils.CopyJSON(this.options)
+            this.setOptions(geojson._umap_options)
+            this.sync.update('options', this.options, oldOptions)
           }
           this.empty()
           if (this.isRemoteLayer()) {
@@ -1072,7 +1041,7 @@ export class DataLayer {
 
   zoomToBounds(bounds) {
     if (bounds.isValid()) {
-      const options = { maxZoom: this.getProperty('zoomTo') }
+      const options = { maxZoom: this.getOption('zoomTo') }
       this._leafletMap.fitBounds(bounds, options)
     }
   }
@@ -1085,7 +1054,7 @@ export class DataLayer {
   // Is this layer browsable in theorie
   // AND the user allows it
   allowBrowse() {
-    return !!this.properties.browsable && this.isBrowsable()
+    return !!this.options.browsable && this.isBrowsable()
   }
 
   // Is this layer browsable in theorie
@@ -1150,7 +1119,7 @@ export class DataLayer {
     return {
       type: 'FeatureCollection',
       features: this.isRemoteLayer() ? [] : this.featuresToGeoJSON(),
-      _umap_options: this.properties,
+      _umap_options: this.options,
     }
   }
 
@@ -1160,7 +1129,7 @@ export class DataLayer {
 
   isReadOnly() {
     // isReadOnly must return true if unset
-    return this.properties.editMode === 'disabled'
+    return this.options.editMode === 'disabled'
   }
 
   isDataReadOnly() {
@@ -1177,10 +1146,10 @@ export class DataLayer {
     }
   }
 
-  prepareProperties() {
-    const properties = Utils.CopyJSON(this.properties)
-    delete properties.permissions
-    return JSON.stringify(properties)
+  prepareOptions() {
+    const options = Utils.CopyJSON(this.options)
+    delete options.permissions
+    return JSON.stringify(options)
   }
 
   async save() {
@@ -1188,10 +1157,10 @@ export class DataLayer {
     if (!this.isRemoteLayer() && !this.isLoaded()) return
     const geojson = this.umapGeoJSON()
     const formData = new FormData()
-    formData.append('name', this.properties.name)
-    formData.append('display_on_load', !!this.properties.displayOnLoad)
+    formData.append('name', this.options.name)
+    formData.append('display_on_load', !!this.options.displayOnLoad)
     formData.append('rank', this.rank)
-    formData.append('settings', this.prepareProperties())
+    formData.append('settings', this.prepareOptions())
     // Filename support is shaky, don't do it for now.
     const blob = new Blob([JSON.stringify(geojson)], { type: 'application/json' })
     formData.append('geojson', blob)
@@ -1240,10 +1209,11 @@ export class DataLayer {
       }
       delete data.id
       delete data._referenceVersion
-      this.updateProperties(data)
+      this.updateOptions(data)
 
       this.setReferenceVersion({ response, sync: true })
 
+      this.backupOptions()
       this.backupData()
       this.connectToMap()
       this.redraw() // Needed for reordering features
@@ -1264,7 +1234,7 @@ export class DataLayer {
   }
 
   getName() {
-    return this.properties.name || translate('Untitled layer')
+    return this.options.name || translate('Untitled layer')
   }
 
   getPermalink() {
@@ -1284,7 +1254,7 @@ export class DataLayer {
     // By default, it will we use the "name" property, which is also the one used as label in the features list.
     // When map owner has configured another label or sort key, we try to be smart and search in the same keys.
     if (this._umap.properties.filterKey) return this._umap.properties.filterKey
-    if (this.getProperty('labelKey')) return this.getProperty('labelKey')
+    if (this.getOption('labelKey')) return this.getOption('labelKey')
     if (this._umap.properties.sortKey) return this._umap.properties.sortKey
     return 'displayName'
   }

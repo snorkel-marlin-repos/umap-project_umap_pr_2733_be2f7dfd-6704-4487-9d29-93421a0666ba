@@ -27,8 +27,8 @@ export const Cluster = L.MarkerClusterGroup.extend({
 
   initialize: function (datalayer) {
     this.datalayer = datalayer
-    if (!Utils.isObject(this.datalayer.properties.cluster)) {
-      this.datalayer.properties.cluster = {}
+    if (!Utils.isObject(this.datalayer.options.cluster)) {
+      this.datalayer.options.cluster = {}
     }
     const options = {
       polygonOptions: {
@@ -36,8 +36,8 @@ export const Cluster = L.MarkerClusterGroup.extend({
       },
       iconCreateFunction: (cluster) => new ClusterIcon(datalayer, cluster),
     }
-    if (this.datalayer.properties.cluster?.radius) {
-      options.maxClusterRadius = this.datalayer.properties.cluster.radius
+    if (this.datalayer.options.cluster?.radius) {
+      options.maxClusterRadius = this.datalayer.options.cluster.radius
     }
     L.MarkerClusterGroup.prototype.initialize.call(this, options)
     LayerMixin.onInit.call(this, this.datalayer._leafletMap)
@@ -81,9 +81,9 @@ export const Cluster = L.MarkerClusterGroup.extend({
     return L.MarkerClusterGroup.prototype.removeLayer.call(this, layer)
   },
 
-  getEditableProperties: () => [
+  getEditableOptions: () => [
     [
-      'properties.cluster.radius',
+      'options.cluster.radius',
       {
         handler: 'BlurIntInput',
         placeholder: translate('Clustering radius'),
@@ -91,7 +91,7 @@ export const Cluster = L.MarkerClusterGroup.extend({
       },
     ],
     [
-      'properties.cluster.textColor',
+      'options.cluster.textColor',
       {
         handler: 'TextColorPicker',
         placeholder: translate('Auto'),
@@ -101,20 +101,13 @@ export const Cluster = L.MarkerClusterGroup.extend({
   ],
 
   onEdit: function (field, builder) {
-    if (field === 'properties.cluster.radius') {
+    if (field === 'options.cluster.radius') {
       // No way to reset radius of an already instanciated MarkerClusterGroup...
       this.datalayer.resetLayer(true)
       return
     }
-    if (field === 'properties.color') {
+    if (field === 'options.color') {
       this.options.polygonOptions.color = this.datalayer.getColor()
     }
-  },
-
-  _moveChild: (layer, from, to) => {
-    // Extend parent method, so to remove remove/addLayer,
-    // to let our own dragend event listener be called
-    // cf https://github.com/umap-project/umap/issues/2749
-    layer._latlng = to
   },
 })

@@ -127,7 +127,11 @@ export default class TableEditor extends WithTemplate {
       .prompt(translate('Please enter the new name of this property'))
       .then(({ prompt }) => {
         if (!prompt || !this.validateName(prompt)) return
-        this.datalayer.renameProperty(property, prompt)
+        this.datalayer.eachFeature((feature) => {
+          feature.renameProperty(property, prompt)
+        })
+        this.datalayer.deindexProperty(property)
+        this.datalayer.indexProperty(prompt)
         this.open()
       })
   }
@@ -138,7 +142,10 @@ export default class TableEditor extends WithTemplate {
         translate('Are you sure you want to delete this property on all the features?')
       )
       .then(() => {
-        this.datalayer.deleteProperty(property)
+        this.datalayer.eachFeature((feature) => {
+          feature.deleteProperty(property)
+        })
+        this.datalayer.deindexProperty(property)
         this.resetProperties()
         this.open()
       })

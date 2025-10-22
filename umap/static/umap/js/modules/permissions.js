@@ -258,7 +258,7 @@ export class DataLayerPermissions {
       {
         edit_status: null,
       },
-      datalayer.properties.permissions
+      datalayer.options.permissions
     )
 
     this.datalayer = datalayer
@@ -314,9 +314,9 @@ export class DataLayerPermissions {
   }
 
   commit() {
-    this.datalayer.properties.permissions = Object.assign(
+    this.datalayer.options.permissions = Object.assign(
       {},
-      this.datalayer.properties.permissions,
+      this.datalayer.options.permissions,
       this.properties
     )
   }

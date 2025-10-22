@@ -137,7 +137,7 @@ export default class Umap {
     this.caption = new Caption(this, this._leafletMap)
     this.importer = new Importer(this)
     this.share = new Share(this)
-    this.rules = new Rules(this, this)
+    this.rules = new Rules(this)
 
     if (this.hasEditMode()) {
       this.editPanel = new EditPanel(this, this._leafletMap)
@@ -504,7 +504,8 @@ export default class Umap {
   }
 
   getOption(key, feature) {
-    // TODO: remove when field.js does not call blindly obj.getOption anymore
+    // TODO: remove when umap.forms.js is refactored and does not call blindly
+    // obj.getOption anymore
     return this.getProperty(key, feature)
   }
 
@@ -637,20 +638,20 @@ export default class Umap {
     this.fire('dataloaded')
   }
 
-  createDataLayer(properties = {}, sync = true) {
-    properties.name =
-      properties.name || `${translate('Layer')} ${this.datalayers.count() + 1}`
-    const datalayer = new DataLayer(this, this._leafletMap, properties)
+  createDataLayer(options = {}, sync = true) {
+    options.name =
+      options.name || `${translate('Layer')} ${this.datalayers.count() + 1}`
+    const datalayer = new DataLayer(this, this._leafletMap, options)
 
     if (sync !== false) {
-      datalayer.sync.upsert(datalayer.properties)
+      datalayer.sync.upsert(datalayer.options)
     }
     return datalayer
   }
 
-  // TODO: remove me in favor of createDataLayer
-  createDirtyDataLayer(properties) {
-    return this.createDataLayer(properties, true)
+  createDirtyDataLayer(options) {
+    const datalayer = this.createDataLayer(options, true)
+    return datalayer
   }
 
   newDataLayer() {
@@ -1495,7 +1496,7 @@ export default class Umap {
       datalayer.renderToolbox(row)
       const builder = new MutatingForm(
         datalayer,
-        [['properties.name', { handler: 'EditableText' }]],
+        [['options.name', { handler: 'EditableText' }]],
         { className: 'umap-form-inline' }
       )
       const form = builder.build()
