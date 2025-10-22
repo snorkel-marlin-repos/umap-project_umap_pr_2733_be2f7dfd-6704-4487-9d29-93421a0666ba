@@ -52,8 +52,8 @@ export class DataLayerUpdater extends BaseUpdater {
 
   update({ key, metadata, value }) {
     const datalayer = this.getDataLayerFromID(metadata.id)
-    if (key === 'properties') {
-      datalayer.setProperties(value)
+    if (key === 'options') {
+      datalayer.setOptions(value)
     } else if (Utils.fieldInSchema(key)) {
       Utils.setObjectValue(datalayer, key, value)
     } else {
@@ -109,11 +109,7 @@ export class FeatureUpdater extends BaseUpdater {
       feature.geometry = value
     } else {
       Utils.setObjectValue(feature, key, value)
-      if (key.startsWith('properties')) {
-        feature.datalayer.indexProperties(feature)
-        const name = key.replace('properties.', '')
-        feature.datalayer.checkIndexForProperty(name)
-      }
+      feature.datalayer.indexProperties(feature)
     }
 
     feature.render([key])

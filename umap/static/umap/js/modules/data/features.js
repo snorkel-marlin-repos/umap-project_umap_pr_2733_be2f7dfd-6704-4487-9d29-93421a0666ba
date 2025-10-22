@@ -340,10 +340,7 @@ class Feature {
   }
 
   hasPopupFooter() {
-    if (
-      this.datalayer.isRemoteLayer() &&
-      this.datalayer.properties.remoteData.dynamic
-    ) {
+    if (this.datalayer.isRemoteLayer() && this.datalayer.options.remoteData.dynamic) {
       return false
     }
     return this._umap.getProperty('displayPopupFooter')
@@ -421,7 +418,7 @@ class Feature {
     } else if (Utils.usableOption(this.properties._umap_options, option)) {
       value = this.properties._umap_options[option]
     } else if (this.datalayer) {
-      value = this.datalayer.getProperty(option, this)
+      value = this.datalayer.getOption(option, this)
     } else {
       value = this._umap.getProperty(option)
     }
@@ -476,16 +473,12 @@ class Feature {
   }
 
   deleteProperty(property) {
-    const oldValue = this.properties[property]
     delete this.properties[property]
-    this.sync.update(`properties.${property}`, undefined, oldValue)
   }
 
   renameProperty(from, to) {
-    const oldValue = this.properties[from]
     this.properties[to] = this.properties[from]
     this.deleteProperty(from)
-    this.sync.update(`properties.${to}`, oldValue, undefined)
   }
 
   toGeoJSON() {
